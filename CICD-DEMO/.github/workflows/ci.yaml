@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/cicd-demo
+
+jobs:
+  build-test-scan:
+    name: Build, Test and Scan
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      - name: Run unit tests
+        id: tests
+        run: npm test
+
+      - name: Run ESLint
+        id: lint
+        run: npm run lint
+
+      - name: SAST - Trivy filesystem scan
+        id: trivy-sast
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-sast-results.sarif"
+          severity: "CRITICAL,HIGH"
+          scanners: "vuln,secret,misconfig"
+          exit-code: "1"
+        continue-on-error: true
+
+      - name: Upload Trivy SAST results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('trivy-sast-results.sarif') != ''
+        with:
+          sarif_file: "trivy-sast-results.sarif"
+          category: "trivy-sast"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Perform CodeQL Analysis
+        id: codeql
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "codeql-javascript"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        id: docker-build
+        run: |
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          docker build -t "$IMAGE_TAG" .
+          docker tag "$IMAGE_TAG" "${{ env.IMAGE_NAME }}:latest"
+
+      - name: SCA - Trivy container image scan
+        id: trivy-sca
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "${{ env.IMAGE_TAG }}"
+          format: "sarif"
+          output: "trivy-sca-results.sarif"
+          severity: "CRITICAL,HIGH"
+          vuln-type: "os,library"
+          exit-code: "1"
+          ignore-unfixed: true
+        continue-on-error: true
+
+      - name: Upload Trivy SCA results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always() && hashFiles('trivy-sca-results.sarif') != ''
+        with:
+          sarif_file: "trivy-sca-results.sarif"
+          category: "trivy-sca"
+
+      - name: Enforce security gates
+        if: steps.trivy-sast.outcome == 'failure' || steps.trivy-sca.outcome == 'failure'
+        run: |
+          echo "SAST scan result: ${{ steps.trivy-sast.outcome }}"
+          echo "SCA scan result: ${{ steps.trivy-sca.outcome }}"
+          echo "Security vulnerabilities detected at CRITICAL/HIGH severity."
+          exit 1
+
+      - name: Login to Docker Hub
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push Docker image
+        id: push-image
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          docker push "${{ env.IMAGE_TAG }}"
+          docker push "${{ env.IMAGE_NAME }}:latest"
+
+      - name: Generate CI Summary
+        if: always()
+        run: |
+          echo "### CI Pipeline Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Check | Outcome |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Install dependencies | ${{ steps.install.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Unit tests | ${{ steps.tests.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ESLint | ${{ steps.lint.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Trivy SAST | ${{ steps.trivy-sast.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| CodeQL | ${{ steps.codeql.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docker build | ${{ steps.docker-build.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Trivy SCA | ${{ steps.trivy-sca.outcome }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Docker push | ${{ steps.push-image.outcome }} |" >> "$GITHUB_STEP_SUMMARY"

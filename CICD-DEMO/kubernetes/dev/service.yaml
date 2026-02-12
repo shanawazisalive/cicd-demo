@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-app-lb
+  namespace: dev
+  labels:
+    app: demo-app
+    environment: dev
+spec:
+  type: LoadBalancer
+  selector:
+    app: demo-app
+    environment: dev
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 3000

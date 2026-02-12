@@ -1,0 +1,40 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Dependencies (will be installed in container)
+node_modules/
+
+# Tests (not needed in production image)
+tests/
+coverage/
+*.test.js
+
+# IDE
+.idea/
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+
+# Kubernetes manifests (not needed in container)
+kubernetes/
+
+# Development files
+.eslintrc.json
+.env*
+*.log
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml

@@ -1,0 +1,571 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types:
+      - completed
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy to"
+        required: true
+        default: "dev"
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+      auth_mode:
+        description: "AWS auth mode"
+        required: true
+        default: "oidc"
+        type: choice
+        options:
+          - oidc
+          - keys
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/cicd-demo
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+
+jobs:
+  deploy-dev-auto:
+    name: Deploy to Dev (Auto)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+
+    environment:
+      name: dev
+      url: "http://dev.example.com"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve auth mode
+        id: auth
+        run: |
+          MODE="${{ vars.AWS_AUTH_MODE }}"
+          if [ -z "$MODE" ]; then
+            MODE="oidc"
+          fi
+          if [ "$MODE" != "oidc" ] && [ "$MODE" != "keys" ]; then
+            echo "::error::Invalid AWS auth mode: $MODE"
+            exit 1
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.auth.outputs.mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials (Access Keys)
+        if: steps.auth.outputs.mode == 'keys'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl for EKS
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Get image tag
+        id: image
+        run: |
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update deployment manifest with image
+        run: sed -i "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.IMAGE_TAG }}|g" kubernetes/dev/deployment.yaml
+
+      - name: Deploy to dev namespace
+        run: |
+          kubectl apply -f kubernetes/dev/deployment.yaml
+          kubectl apply -f kubernetes/dev/service.yaml
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/demo-app -n dev --timeout=300s
+
+      - name: Verify deployment health
+        run: |
+          ENDPOINT=""
+          for i in {1..30}; do
+            HOSTNAME=$(kubectl get svc demo-app-lb -n dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            IP=$(kubectl get svc demo-app-lb -n dev -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+            if [ -n "$HOSTNAME" ] && [ "$HOSTNAME" != "null" ]; then
+              ENDPOINT="$HOSTNAME"
+              break
+            fi
+
+            if [ -n "$IP" ] && [ "$IP" != "null" ]; then
+              ENDPOINT="$IP"
+              break
+            fi
+
+            echo "Waiting for LoadBalancer endpoint... ($i/30)"
+            sleep 10
+          done
+
+          if [ -n "$ENDPOINT" ]; then
+            echo "Testing health endpoint at $ENDPOINT"
+            curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
+          else
+            echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
+          fi
+
+      - name: Verify deployment health
+        run: |
+          ENDPOINT=""
+          for i in {1..30}; do
+            HOSTNAME=$(kubectl get svc demo-app-lb -n dev -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            IP=$(kubectl get svc demo-app-lb -n dev -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+            if [ -n "$HOSTNAME" ] && [ "$HOSTNAME" != "null" ]; then
+              ENDPOINT="$HOSTNAME"
+              break
+            fi
+
+            if [ -n "$IP" ] && [ "$IP" != "null" ]; then
+              ENDPOINT="$IP"
+              break
+            fi
+
+            echo "Waiting for LoadBalancer endpoint... ($i/30)"
+            sleep 10
+          done
+
+          if [ -n "$ENDPOINT" ]; then
+            echo "Testing health endpoint at $ENDPOINT"
+            curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
+          else
+            echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
+          fi
+
+  deploy-stage-auto:
+    name: Deploy to Stage (Auto)
+    runs-on: ubuntu-latest
+    needs: deploy-dev-auto
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+
+    environment:
+      name: stage
+      url: "http://stage.example.com"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve auth mode
+        id: auth
+        run: |
+          MODE="${{ vars.AWS_AUTH_MODE }}"
+          if [ -z "$MODE" ]; then
+            MODE="oidc"
+          fi
+          if [ "$MODE" != "oidc" ] && [ "$MODE" != "keys" ]; then
+            echo "::error::Invalid AWS auth mode: $MODE"
+            exit 1
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.auth.outputs.mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials (Access Keys)
+        if: steps.auth.outputs.mode == 'keys'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl for EKS
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Get image tag
+        id: image
+        run: |
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update deployment manifest with image
+        run: sed -i "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.IMAGE_TAG }}|g" kubernetes/stage/deployment.yaml
+
+      - name: Deploy to stage namespace
+        run: |
+          kubectl apply -f kubernetes/stage/deployment.yaml
+          kubectl apply -f kubernetes/stage/service.yaml
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/demo-app -n stage --timeout=300s
+
+      - name: Verify deployment health
+        run: |
+          ENDPOINT=""
+          for i in {1..30}; do
+            HOSTNAME=$(kubectl get svc demo-app-lb -n stage -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            IP=$(kubectl get svc demo-app-lb -n stage -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+            if [ -n "$HOSTNAME" ] && [ "$HOSTNAME" != "null" ]; then
+              ENDPOINT="$HOSTNAME"
+              break
+            fi
+
+            if [ -n "$IP" ] && [ "$IP" != "null" ]; then
+              ENDPOINT="$IP"
+              break
+            fi
+
+            echo "Waiting for LoadBalancer endpoint... ($i/30)"
+            sleep 10
+          done
+
+          if [ -n "$ENDPOINT" ]; then
+            echo "Testing health endpoint at $ENDPOINT"
+            curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
+          else
+            echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
+          fi
+
+      - name: Verify deployment health
+        run: |
+          ENDPOINT=""
+          for i in {1..30}; do
+            HOSTNAME=$(kubectl get svc demo-app-lb -n stage -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            IP=$(kubectl get svc demo-app-lb -n stage -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+            if [ -n "$HOSTNAME" ] && [ "$HOSTNAME" != "null" ]; then
+              ENDPOINT="$HOSTNAME"
+              break
+            fi
+
+            if [ -n "$IP" ] && [ "$IP" != "null" ]; then
+              ENDPOINT="$IP"
+              break
+            fi
+
+            echo "Waiting for LoadBalancer endpoint... ($i/30)"
+            sleep 10
+          done
+
+          if [ -n "$ENDPOINT" ]; then
+            echo "Testing health endpoint at $ENDPOINT"
+            curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
+          else
+            echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
+          fi
+
+  deploy-prod-auto:
+    name: Deploy to Prod (Auto)
+    runs-on: ubuntu-latest
+    needs: deploy-stage-auto
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+
+    environment:
+      name: prod
+      url: "http://prod.example.com"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve auth mode
+        id: auth
+        run: |
+          MODE="${{ vars.AWS_AUTH_MODE }}"
+          if [ -z "$MODE" ]; then
+            MODE="oidc"
+          fi
+          if [ "$MODE" != "oidc" ] && [ "$MODE" != "keys" ]; then
+            echo "::error::Invalid AWS auth mode: $MODE"
+            exit 1
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.auth.outputs.mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials (Access Keys)
+        if: steps.auth.outputs.mode == 'keys'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl for EKS
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Get image tag
+        id: image
+        run: |
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update deployment manifest with image
+        run: sed -i "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.IMAGE_TAG }}|g" kubernetes/prod/deployment.yaml
+
+      - name: Deploy to prod namespace
+        run: |
+          kubectl apply -f kubernetes/prod/deployment.yaml
+          kubectl apply -f kubernetes/prod/service.yaml
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/demo-app -n prod --timeout=300s
+
+      - name: Verify deployment health
+        run: |
+          ENDPOINT=""
+          for i in {1..30}; do
+            HOSTNAME=$(kubectl get svc demo-app-lb -n prod -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            IP=$(kubectl get svc demo-app-lb -n prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+            if [ -n "$HOSTNAME" ] && [ "$HOSTNAME" != "null" ]; then
+              ENDPOINT="$HOSTNAME"
+              break
+            fi
+
+            if [ -n "$IP" ] && [ "$IP" != "null" ]; then
+              ENDPOINT="$IP"
+              break
+            fi
+
+            echo "Waiting for LoadBalancer endpoint... ($i/30)"
+            sleep 10
+          done
+
+          if [ -n "$ENDPOINT" ]; then
+            echo "Testing health endpoint at $ENDPOINT"
+            curl -sf "http://$ENDPOINT/health" && echo "Production deployment healthy"
+          else
+            echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
+          fi
+
+      - name: Verify deployment health
+        run: |
+          ENDPOINT=""
+          for i in {1..30}; do
+            HOSTNAME=$(kubectl get svc demo-app-lb -n prod -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+            IP=$(kubectl get svc demo-app-lb -n prod -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+            if [ -n "$HOSTNAME" ] && [ "$HOSTNAME" != "null" ]; then
+              ENDPOINT="$HOSTNAME"
+              break
+            fi
+
+            if [ -n "$IP" ] && [ "$IP" != "null" ]; then
+              ENDPOINT="$IP"
+              break
+            fi
+
+            echo "Waiting for LoadBalancer endpoint... ($i/30)"
+            sleep 10
+          done
+
+          if [ -n "$ENDPOINT" ]; then
+            echo "Testing health endpoint at $ENDPOINT"
+            curl -sf "http://$ENDPOINT/health" && echo "Production deployment healthy"
+          else
+            echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
+          fi
+
+  deploy-dev-manual:
+    name: Deploy to Dev (Manual)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev'
+
+    environment:
+      name: dev
+      url: "http://dev.example.com"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve auth mode
+        id: auth
+        run: |
+          MODE="${{ github.event.inputs.auth_mode }}"
+          if [ "$MODE" != "oidc" ] && [ "$MODE" != "keys" ]; then
+            echo "::error::Invalid AWS auth mode: $MODE"
+            exit 1
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.auth.outputs.mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials (Access Keys)
+        if: steps.auth.outputs.mode == 'keys'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl for EKS
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Get image tag
+        id: image
+        run: |
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:latest"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update deployment manifest with image
+        run: sed -i "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.IMAGE_TAG }}|g" kubernetes/dev/deployment.yaml
+
+      - name: Deploy to dev namespace
+        run: |
+          kubectl apply -f kubernetes/dev/deployment.yaml
+          kubectl apply -f kubernetes/dev/service.yaml
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/demo-app -n dev --timeout=300s
+
+  deploy-stage-manual:
+    name: Deploy to Stage (Manual)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage'
+
+    environment:
+      name: stage
+      url: "http://stage.example.com"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve auth mode
+        id: auth
+        run: |
+          MODE="${{ github.event.inputs.auth_mode }}"
+          if [ "$MODE" != "oidc" ] && [ "$MODE" != "keys" ]; then
+            echo "::error::Invalid AWS auth mode: $MODE"
+            exit 1
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.auth.outputs.mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials (Access Keys)
+        if: steps.auth.outputs.mode == 'keys'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl for EKS
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Get image tag
+        id: image
+        run: |
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:latest"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update deployment manifest with image
+        run: sed -i "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.IMAGE_TAG }}|g" kubernetes/stage/deployment.yaml
+
+      - name: Deploy to stage namespace
+        run: |
+          kubectl apply -f kubernetes/stage/deployment.yaml
+          kubectl apply -f kubernetes/stage/service.yaml
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/demo-app -n stage --timeout=300s
+
+  deploy-prod-manual:
+    name: Deploy to Prod (Manual)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
+
+    environment:
+      name: prod
+      url: "http://prod.example.com"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Resolve auth mode
+        id: auth
+        run: |
+          MODE="${{ github.event.inputs.auth_mode }}"
+          if [ "$MODE" != "oidc" ] && [ "$MODE" != "keys" ]; then
+            echo "::error::Invalid AWS auth mode: $MODE"
+            exit 1
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+
+      - name: Configure AWS credentials (OIDC)
+        if: steps.auth.outputs.mode == 'oidc'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure AWS credentials (Access Keys)
+        if: steps.auth.outputs.mode == 'keys'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubectl for EKS
+        run: aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Get image tag
+        id: image
+        run: |
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:latest"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update deployment manifest with image
+        run: sed -i "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.IMAGE_TAG }}|g" kubernetes/prod/deployment.yaml
+
+      - name: Deploy to prod namespace
+        run: |
+          kubectl apply -f kubernetes/prod/deployment.yaml
+          kubectl apply -f kubernetes/prod/service.yaml
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/demo-app -n prod --timeout=300s
