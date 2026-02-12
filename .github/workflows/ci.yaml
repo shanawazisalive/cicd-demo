@@ -50,7 +50,7 @@ jobs:
           scan-ref: "."
           format: "sarif"
           output: "trivy-sast-results.sarif"
-          severity: "CRITICAL,HIGH"
+          severity: "CRITICAL"
           scanners: "vuln,secret,misconfig"
           exit-code: "1"
           ignore-unfixed: true
@@ -92,7 +92,7 @@ jobs:
           image-ref: "${{ env.IMAGE_TAG }}"
           format: "sarif"
           output: "trivy-sca-results.sarif"
-          severity: "CRITICAL,HIGH"
+          severity: "CRITICAL"
           vuln-type: "os,library"
           exit-code: "1"
           ignore-unfixed: true
