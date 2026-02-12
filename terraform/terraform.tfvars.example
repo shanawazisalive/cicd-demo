@@ -1,0 +1,29 @@
+# AWS Account Configuration
+aws_account_id = "YOUR_AWS_ACCOUNT_ID"  # Replace with your 12-digit AWS account ID
+aws_region     = "us-east-1"
+
+# Existing VPC and Subnets
+vpc_id = "vpc-xxxxxxxxxxxxxxxxx"  # Replace with your VPC ID
+subnet_ids = [
+  "subnet-xxxxxxxxxxxxxxxxx",  # Replace with your subnet IDs (minimum 2, across different AZs)
+  "subnet-xxxxxxxxxxxxxxxxx",
+  "subnet-xxxxxxxxxxxxxxxxx"
+]
+
+# EKS Cluster Configuration
+cluster_name    = "cicd-demo-cluster"
+cluster_version = "1.31"
+
+# Node Group Configuration
+node_instance_type = "t3.medium"
+node_desired_size  = 3
+node_min_size      = 2
+node_max_size      = 5
+
+# GitHub Actions Configuration
+github_org       = "shanawazisalive"
+github_repo      = "cicd-demo"
+deploy_role_name = "cicd-demo-deploy-role"
+
+# Kubernetes Namespaces
+namespaces = ["dev", "stage", "prod"]

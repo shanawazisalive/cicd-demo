@@ -54,3 +54,16 @@ temp/
 *.key
 secrets.yaml
 secrets.json
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+*.tfvars
+!terraform.tfvars.example
+.terraform.lock.hcl
+
+# Local-only deployment helper scripts
+scripts/aws-prerequisites.sh
+scripts/aws-prerequisites.ps1
