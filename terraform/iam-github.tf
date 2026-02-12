@@ -87,47 +87,15 @@ resource "aws_eks_access_entry" "github_actions" {
   ]
 }
 
-# EKS Access Policy Association for dev namespace
-resource "aws_eks_access_policy_association" "github_actions_dev" {
+# EKS Access Policy Association for all namespaces
+resource "aws_eks_access_policy_association" "github_actions" {
   cluster_name  = aws_eks_cluster.main.name
   principal_arn = aws_iam_role.github_actions_deploy.arn
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
 
   access_scope {
     type       = "namespace"
-    namespaces = ["dev"]
-  }
-
-  depends_on = [
-    aws_eks_access_entry.github_actions
-  ]
-}
-
-# EKS Access Policy Association for stage namespace
-resource "aws_eks_access_policy_association" "github_actions_stage" {
-  cluster_name  = aws_eks_cluster.main.name
-  principal_arn = aws_iam_role.github_actions_deploy.arn
-  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
-
-  access_scope {
-    type       = "namespace"
-    namespaces = ["stage"]
-  }
-
-  depends_on = [
-    aws_eks_access_entry.github_actions
-  ]
-}
-
-# EKS Access Policy Association for prod namespace
-resource "aws_eks_access_policy_association" "github_actions_prod" {
-  cluster_name  = aws_eks_cluster.main.name
-  principal_arn = aws_iam_role.github_actions_deploy.arn
-  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
-
-  access_scope {
-    type       = "namespace"
-    namespaces = ["prod"]
+    namespaces = var.namespaces
   }
 
   depends_on = [
