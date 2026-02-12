@@ -26,6 +26,11 @@ on:
         options:
           - oidc
           - keys
+      commit_sha:
+        description: "Commit SHA to deploy (leave empty for latest main)"
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -179,8 +184,13 @@ jobs:
       - name: Get image tag
         id: image
         run: |
-          IMAGE_TAG="${{ env.IMAGE_NAME }}:latest"
+          SHA="${{ github.event.inputs.commit_sha }}"
+          if [ -z "$SHA" ]; then
+            SHA="${{ github.sha }}"
+          fi
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:${SHA}"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Deploying image: $IMAGE_TAG"
 
       - name: Update deployment manifest with image
         run: sed -i "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.IMAGE_TAG }}|g" kubernetes/dev/deployment.yaml
@@ -266,8 +276,13 @@ jobs:
       - name: Get image tag
         id: image
         run: |
-          IMAGE_TAG="${{ env.IMAGE_NAME }}:latest"
+          SHA="${{ github.event.inputs.commit_sha }}"
+          if [ -z "$SHA" ]; then
+            SHA="${{ github.sha }}"
+          fi
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:${SHA}"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Deploying image: $IMAGE_TAG"
 
       - name: Update deployment manifest with image
         run: sed -i "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.IMAGE_TAG }}|g" kubernetes/stage/deployment.yaml
@@ -353,8 +368,13 @@ jobs:
       - name: Get image tag
         id: image
         run: |
-          IMAGE_TAG="${{ env.IMAGE_NAME }}:latest"
+          SHA="${{ github.event.inputs.commit_sha }}"
+          if [ -z "$SHA" ]; then
+            SHA="${{ github.sha }}"
+          fi
+          IMAGE_TAG="${{ env.IMAGE_NAME }}:${SHA}"
           echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+          echo "Deploying image: $IMAGE_TAG"
 
       - name: Update deployment manifest with image
         run: sed -i "s|IMAGE_PLACEHOLDER|${{ steps.image.outputs.IMAGE_TAG }}|g" kubernetes/prod/deployment.yaml
