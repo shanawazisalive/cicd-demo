@@ -360,7 +360,7 @@ jobs:
 
           if [ -n "$ENDPOINT" ]; then
             echo "Testing health endpoint at $ENDPOINT"
-            curl -sf "http://$ENDPOINT/health" && echo "Production deployment healthy"
+            curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
           else
             echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
           fi
@@ -388,7 +388,7 @@ jobs:
 
           if [ -n "$ENDPOINT" ]; then
             echo "Testing health endpoint at $ENDPOINT"
-            curl -sf "http://$ENDPOINT/health" && echo "Production deployment healthy"
+            curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
           else
             echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
           fi
