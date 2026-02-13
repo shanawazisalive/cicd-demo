@@ -50,9 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
 
-    environment:
-      name: dev
-      url: ${{ steps.get_url.outputs.app_url }}
+    environment: dev
 
     steps:
       - name: Checkout code
@@ -130,9 +128,11 @@ jobs:
           done
 
           if [ -n "$ENDPOINT" ]; then
-            echo "app_url=http://$ENDPOINT" >> "$GITHUB_OUTPUT"
             echo "Testing health endpoint at $ENDPOINT"
             curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
+            echo "## :rocket: Dev Deployment" >> $GITHUB_STEP_SUMMARY
+            echo "**App URL:** http://$ENDPOINT" >> $GITHUB_STEP_SUMMARY
+            echo "**Health:** http://$ENDPOINT/health" >> $GITHUB_STEP_SUMMARY
           else
             echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
           fi
@@ -146,9 +146,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'dev'
 
-    environment:
-      name: dev
-      url: ${{ steps.get_url.outputs.app_url }}
+    environment: dev
 
     steps:
       - name: Checkout code
@@ -228,9 +226,11 @@ jobs:
           done
 
           if [ -n "$ENDPOINT" ]; then
-            echo "app_url=http://$ENDPOINT" >> "$GITHUB_OUTPUT"
             echo "Testing health endpoint at $ENDPOINT"
             curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
+            echo "## :rocket: Dev Deployment" >> $GITHUB_STEP_SUMMARY
+            echo "**App URL:** http://$ENDPOINT" >> $GITHUB_STEP_SUMMARY
+            echo "**Health:** http://$ENDPOINT/health" >> $GITHUB_STEP_SUMMARY
           else
             echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
           fi
@@ -240,9 +240,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'stage'
 
-    environment:
-      name: stage
-      url: ${{ steps.get_url.outputs.app_url }}
+    environment: stage
 
     steps:
       - name: Checkout code
@@ -322,9 +320,11 @@ jobs:
           done
 
           if [ -n "$ENDPOINT" ]; then
-            echo "app_url=http://$ENDPOINT" >> "$GITHUB_OUTPUT"
             echo "Testing health endpoint at $ENDPOINT"
             curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
+            echo "## :rocket: Stage Deployment" >> $GITHUB_STEP_SUMMARY
+            echo "**App URL:** http://$ENDPOINT" >> $GITHUB_STEP_SUMMARY
+            echo "**Health:** http://$ENDPOINT/health" >> $GITHUB_STEP_SUMMARY
           else
             echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
           fi
@@ -334,9 +334,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod'
 
-    environment:
-      name: prod
-      url: ${{ steps.get_url.outputs.app_url }}
+    environment: prod
 
     steps:
       - name: Checkout code
@@ -416,9 +414,11 @@ jobs:
           done
 
           if [ -n "$ENDPOINT" ]; then
-            echo "app_url=http://$ENDPOINT" >> "$GITHUB_OUTPUT"
             echo "Testing health endpoint at $ENDPOINT"
             curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
+            echo "## :rocket: Prod Deployment" >> $GITHUB_STEP_SUMMARY
+            echo "**App URL:** http://$ENDPOINT" >> $GITHUB_STEP_SUMMARY
+            echo "**Health:** http://$ENDPOINT/health" >> $GITHUB_STEP_SUMMARY
           else
             echo "::warning::LoadBalancer endpoint not assigned yet. Check AWS console for status."
           fi
