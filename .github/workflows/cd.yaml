@@ -37,9 +37,9 @@ permissions:
   id-token: write
 
 env:
-  IMAGE_NAME: ${{ vars.DOCKERHUB_USERNAME }}/cicd-demo
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/cicd-demo
   AWS_REGION: ${{ vars.AWS_REGION }}
-  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
 
 jobs:
   # =============================================================
