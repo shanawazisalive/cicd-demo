@@ -52,7 +52,7 @@ jobs:
 
     environment:
       name: dev
-      url: "http://ae4c7a5f0f53d49c4a820f3128f91fb9-2088408825.us-east-1.elb.amazonaws.com"
+      url: ${{ steps.get_url.outputs.app_url }}
 
     steps:
       - name: Checkout code
@@ -108,6 +108,7 @@ jobs:
         run: kubectl rollout status deployment/demo-app -n dev --timeout=300s
 
       - name: Verify deployment health
+        id: get_url
         run: |
           ENDPOINT=""
           for i in {1..30}; do
@@ -129,6 +130,7 @@ jobs:
           done
 
           if [ -n "$ENDPOINT" ]; then
+            echo "app_url=http://$ENDPOINT" >> "$GITHUB_OUTPUT"
             echo "Testing health endpoint at $ENDPOINT"
             curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
           else
@@ -146,7 +148,7 @@ jobs:
 
     environment:
       name: dev
-      url: "http://ae4c7a5f0f53d49c4a820f3128f91fb9-2088408825.us-east-1.elb.amazonaws.com"
+      url: ${{ steps.get_url.outputs.app_url }}
 
     steps:
       - name: Checkout code
@@ -204,6 +206,7 @@ jobs:
         run: kubectl rollout status deployment/demo-app -n dev --timeout=300s
 
       - name: Verify deployment health
+        id: get_url
         run: |
           ENDPOINT=""
           for i in {1..30}; do
@@ -225,6 +228,7 @@ jobs:
           done
 
           if [ -n "$ENDPOINT" ]; then
+            echo "app_url=http://$ENDPOINT" >> "$GITHUB_OUTPUT"
             echo "Testing health endpoint at $ENDPOINT"
             curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
           else
@@ -238,7 +242,7 @@ jobs:
 
     environment:
       name: stage
-      url: "http://a7d5eb5b4ab254217b3d71fbe401b374-258687165.us-east-1.elb.amazonaws.com"
+      url: ${{ steps.get_url.outputs.app_url }}
 
     steps:
       - name: Checkout code
@@ -296,6 +300,7 @@ jobs:
         run: kubectl rollout status deployment/demo-app -n stage --timeout=300s
 
       - name: Verify deployment health
+        id: get_url
         run: |
           ENDPOINT=""
           for i in {1..30}; do
@@ -317,6 +322,7 @@ jobs:
           done
 
           if [ -n "$ENDPOINT" ]; then
+            echo "app_url=http://$ENDPOINT" >> "$GITHUB_OUTPUT"
             echo "Testing health endpoint at $ENDPOINT"
             curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
           else
@@ -330,7 +336,7 @@ jobs:
 
     environment:
       name: prod
-      url: "http://a280699628a7d49b6be66aa13c4a9b9b-1766964183.us-east-1.elb.amazonaws.com"
+      url: ${{ steps.get_url.outputs.app_url }}
 
     steps:
       - name: Checkout code
@@ -388,6 +394,7 @@ jobs:
         run: kubectl rollout status deployment/demo-app -n prod --timeout=300s
 
       - name: Verify deployment health
+        id: get_url
         run: |
           ENDPOINT=""
           for i in {1..30}; do
@@ -409,6 +416,7 @@ jobs:
           done
 
           if [ -n "$ENDPOINT" ]; then
+            echo "app_url=http://$ENDPOINT" >> "$GITHUB_OUTPUT"
             echo "Testing health endpoint at $ENDPOINT"
             curl -sf "http://$ENDPOINT/health" || echo "Health check pending (load balancer still stabilizing)"
           else
